@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './features/auth/AuthContext';
+import { ScrollToTop } from './components/Common/ScrollToTop';
 import { LandingPage } from './features/landing/LandingPage';
 import { AuthPage } from './features/auth/AuthPage';
 import { Shell } from './components/Layout/Shell';
@@ -16,6 +17,7 @@ export const App: React.FC = () => {
     <ThemeProvider>
       <AuthProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <Routes>
             {/* Public Landing & Onboarding */}
             <Route path="/" element={<LandingPage />} />

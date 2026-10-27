@@ -332,40 +332,53 @@ export const AuthPage: React.FC = () => {
       </div>
 
       {/* Brand Header - Pure Bold Typographic Logo (No Square Icon) */}
+      {/* Brand Header with Majestic Tree of Life Logo */}
       <Link
         to="/"
         style={{
           display: 'flex',
-          flexDirection: 'column',
           alignItems: 'center',
+          gap: '14px',
           textDecoration: 'none',
-          marginBottom: '24px',
+          marginBottom: '26px',
           marginTop: '40px',
         }}
       >
-        <span
+        <img
+          src="/logo-sm.png"
+          alt="Krea Nova"
           style={{
-            fontSize: '24px',
-            fontWeight: 900,
-            letterSpacing: '-0.03em',
-            color: 'var(--text-primary)',
-            lineHeight: 1.1,
+            width: '46px',
+            height: '46px',
+            objectFit: 'contain',
+            filter: 'drop-shadow(0 2px 10px var(--brand-gold-glow))',
           }}
-        >
-          KREA NOVA
-        </span>
-        <span
-          style={{
-            fontSize: '10px',
-            fontWeight: 700,
-            letterSpacing: '0.18em',
-            textTransform: 'uppercase',
-            color: 'var(--text-subtle)',
-            marginTop: '2px',
-          }}
-        >
-          REAL ESTATE INVESTMENTS
-        </span>
+        />
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span
+            style={{
+              fontSize: '24px',
+              fontWeight: 900,
+              letterSpacing: '0.03em',
+              color: 'var(--text-primary)',
+              lineHeight: 1,
+            }}
+          >
+            KREA NOVA
+          </span>
+          <span
+            style={{
+              fontSize: '10px',
+              fontWeight: 800,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+              color: 'var(--brand-gold)',
+              marginTop: '4px',
+            }}
+          >
+            REAL ESTATE INVESTMENTS
+          </span>
+        </div>
       </Link>
 
       {/* Main Auth Container Card */}

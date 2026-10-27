@@ -32,6 +32,13 @@
   --shadow-elevation: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
   --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.35);
 
+  /* Brand Symbol Accents (Golden Solar Tree of Life) */
+  --brand-gold: #d4af37;
+  --brand-gold-glow: rgba(212, 175, 55, 0.25);
+  --brand-gold-subtle: rgba(212, 175, 55, 0.12);
+  --brand-emerald: #10b981;
+  --brand-emerald-subtle: rgba(16, 185, 129, 0.12);
+
   /* Same building image: Cinematic night styling in dark mode */
   --banner-img: url("https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=2000&q=80");
   --banner-overlay: linear-gradient(to top, #09090b 8%, rgba(9, 9, 11, 0.35) 60%, rgba(9, 9, 11, 0.75) 100%);
@@ -88,6 +95,13 @@
 
   --shadow-elevation: 0 16px 36px -12px rgba(15, 23, 42, 0.1);
   --shadow-card: 0 2px 12px -2px rgba(15, 23, 42, 0.06), 0 8px 24px -6px rgba(15, 23, 42, 0.04);
+
+  /* Brand Symbol Accents in Light (Refined Brushed Gold & Deep Emerald) */
+  --brand-gold: #b38728;
+  --brand-gold-glow: rgba(179, 135, 40, 0.18);
+  --brand-gold-subtle: rgba(179, 135, 40, 0.08);
+  --brand-emerald: #059669;
+  --brand-emerald-subtle: rgba(5, 150, 105, 0.08);
 
   /* Same building image: Natural, bright, sunlit building colors with blue sky */
   --banner-img: url("https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=2000&q=80");

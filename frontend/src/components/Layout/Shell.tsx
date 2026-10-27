@@ -37,59 +37,104 @@ export const Shell: React.FC = () => {
           }}
         >
           {/* Brand */}
-          <Link to="/" style={{ display: 'flex', flexDirection: 'column' }}>
-            <span
+          {/* Brand Logo & Name - Exact Match to Landing Page */}
+          <Link
+            to="/"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              textDecoration: 'none',
+              transition: 'opacity var(--transition-fast)',
+            }}
+          >
+            <img
+              src="/logo-sm.png"
+              alt="Krea Nova"
               style={{
-                fontFamily: 'var(--font-display)',
-                fontWeight: 800,
-                fontSize: '20px',
-                letterSpacing: '0.04em',
-                color: 'var(--text-primary)',
-                lineHeight: 1,
+                width: '40px',
+                height: '40px',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 2px 8px var(--brand-gold-glow))',
               }}
-            >
-              KREA NOVA
-            </span>
-            <span
-              style={{
-                fontSize: '9px',
-                color: 'var(--text-subtle)',
-                letterSpacing: '0.12em',
-                fontWeight: 700,
-                marginTop: '2px',
-              }}
-            >
-              INVESTMENTS
-            </span>
+            />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontWeight: 900,
+                  fontSize: '22px',
+                  letterSpacing: '0.04em',
+                  color: 'var(--text-primary)',
+                  lineHeight: 1,
+                }}
+              >
+                KREA NOVA
+              </span>
+              <span
+                style={{
+                  fontSize: '9px',
+                  color: 'var(--brand-gold)',
+                  letterSpacing: '0.16em',
+                  fontWeight: 800,
+                  marginTop: '3px',
+                }}
+              >
+                REAL ESTATE INVESTMENTS
+              </span>
+            </div>
           </Link>
 
-          {/* Simple Navigation - Adapts to Authentication State */}
-          <nav style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
+          {/* Desktop Navigation Links - Exact Order and Styling of Landing Page */}
+          <nav
+            style={{ display: 'flex', gap: '28px', alignItems: 'center' }}
+            className="desktop-nav"
+          >
+            <Link
+              to="/#como-funciona"
+              style={{
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text-muted)',
+                fontWeight: 500,
+                transition: 'color 150ms ease',
+              }}
+            >
+              Cómo Funciona
+            </Link>
+
+            <Link
+              to="/#seguridad"
+              style={{
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text-muted)',
+                fontWeight: 500,
+                transition: 'color 150ms ease',
+              }}
+            >
+              Seguridad Jurídica
+            </Link>
+
             <NavLink
               to="/app/projects"
               style={({ isActive }) => ({
-                fontSize: 'var(--text-base)',
-                fontWeight: isActive ? 700 : 500,
+                fontSize: 'var(--text-sm)',
+                fontWeight: isActive ? 600 : 500,
                 color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
-                borderBottom: isActive ? '2px solid var(--text-primary)' : '2px solid transparent',
-                padding: '8px 0',
-                transition: 'all 150ms ease',
+                transition: 'color 150ms ease',
               })}
             >
               Oportunidades
             </NavLink>
 
-            {isAuthenticated ? (
+            {isAuthenticated && (
               <>
                 <NavLink
                   to="/app/portfolio"
                   style={({ isActive }) => ({
-                    fontSize: 'var(--text-base)',
-                    fontWeight: isActive ? 700 : 500,
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: isActive ? 600 : 500,
                     color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
-                    borderBottom: isActive ? '2px solid var(--text-primary)' : '2px solid transparent',
-                    padding: '8px 0',
-                    transition: 'all 150ms ease',
+                    transition: 'color 150ms ease',
                   })}
                 >
                   Mi Portfolio
@@ -98,68 +143,39 @@ export const Shell: React.FC = () => {
                 <NavLink
                   to="/app/secondary-market"
                   style={({ isActive }) => ({
-                    fontSize: 'var(--text-base)',
-                    fontWeight: isActive ? 700 : 500,
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: isActive ? 600 : 500,
                     color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
-                    borderBottom: isActive ? '2px solid var(--text-primary)' : '2px solid transparent',
-                    padding: '8px 0',
-                    transition: 'all 150ms ease',
+                    transition: 'color 150ms ease',
                   })}
                 >
                   Mercado Secundario
                 </NavLink>
               </>
-            ) : (
-              <>
-                <Link
-                  to="/#como-funciona"
-                  style={{
-                    fontSize: 'var(--text-base)',
-                    fontWeight: 500,
-                    color: 'var(--text-muted)',
-                    padding: '8px 0',
-                    transition: 'all 150ms ease',
-                  }}
-                >
-                  Cómo Funciona
-                </Link>
-
-                <Link
-                  to="/#seguridad"
-                  style={{
-                    fontSize: 'var(--text-base)',
-                    fontWeight: 500,
-                    color: 'var(--text-muted)',
-                    padding: '8px 0',
-                    transition: 'all 150ms ease',
-                  }}
-                >
-                  Seguridad Jurídica
-                </Link>
-              </>
             )}
           </nav>
 
-          {/* Right Controls: Only show balance & user if authenticated, else show Ingresar/Crear Cuenta */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          {/* Right Controls: Identical Styling to Landing Page */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
               style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
                 background: 'var(--btn-secondary-bg)',
                 border: '1px solid var(--btn-secondary-border)',
                 color: 'var(--text-primary)',
                 display: 'grid',
                 placeItems: 'center',
                 cursor: 'pointer',
+                transition: 'all 150ms ease',
               }}
               title={theme === 'dark' ? 'Cambiar a modo Blanco' : 'Cambiar a modo Negro'}
-              aria-label="Cambiar tema"
+              aria-label="Alternar tema visual"
             >
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+              {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
             </button>
 
             {isAuthenticated ? (
@@ -222,15 +238,15 @@ export const Shell: React.FC = () => {
                 {/* Unauthenticated CTAs: Pure Login / Register */}
                 <Link
                   to="/auth?mode=login"
-                  className="btn-secondary"
-                  style={{ height: '36px', padding: '0 16px', fontSize: 'var(--text-sm)' }}
+                  className="btn-secondary desktop-cta"
+                  style={{ padding: '8px 18px', fontSize: 'var(--text-sm)' }}
                 >
                   Ingresar
                 </Link>
                 <Link
                   to="/auth?mode=register"
                   className="btn-primary"
-                  style={{ height: '36px', padding: '0 16px', fontSize: 'var(--text-sm)' }}
+                  style={{ padding: '8px 18px', fontSize: 'var(--text-sm)' }}
                 >
                   Crear Cuenta
                 </Link>

@@ -17,6 +17,7 @@ export const ProjectsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     api.getProjects().then(setProjects);
   }, []);
 

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 
 export type UserRole = 'investor' | 'developer' | 'admin';
 export type UserType = 'individual' | 'corporate';
@@ -69,18 +69,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('kreanova_user');
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem('kreanova_user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('kreanova_user');
-    }
-  }, [user]);
+  // Always start unauthenticated by default so fresh visits are public
+  const [user, setUser] = useState<User | null>(null);
 
   const login = (email: string, role: UserRole = 'investor') => {
     const newUser: User = {
