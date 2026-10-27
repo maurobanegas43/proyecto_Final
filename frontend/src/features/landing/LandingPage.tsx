@@ -62,30 +62,52 @@ export const LandingPage: React.FC = () => {
           }}
         >
           {/* Brand - Pure, confident typography without icon */}
-          <Link to="/" style={{ display: 'flex', flexDirection: 'column' }}>
-            <span
+          {/* Brand Logo & Name */}
+          <Link
+            to="/"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              textDecoration: 'none',
+              transition: 'opacity var(--transition-fast)',
+            }}
+          >
+            <img
+              src="/logo-sm.png"
+              alt="Krea Nova"
               style={{
-                fontFamily: 'var(--font-display)',
-                fontWeight: 800,
-                fontSize: '22px',
-                letterSpacing: '0.05em',
-                color: 'var(--text-primary)',
-                lineHeight: 1,
+                width: '40px',
+                height: '40px',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 2px 8px var(--brand-gold-glow))',
               }}
-            >
-              KREA NOVA
-            </span>
-            <span
-              style={{
-                fontSize: '9px',
-                color: 'var(--text-subtle)',
-                letterSpacing: '0.14em',
-                fontWeight: 700,
-                marginTop: '3px',
-              }}
-            >
-              REAL ESTATE INVESTMENTS
-            </span>
+            />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontWeight: 900,
+                  fontSize: '22px',
+                  letterSpacing: '0.04em',
+                  color: 'var(--text-primary)',
+                  lineHeight: 1,
+                }}
+              >
+                KREA NOVA
+              </span>
+              <span
+                style={{
+                  fontSize: '9px',
+                  color: 'var(--brand-gold)',
+                  letterSpacing: '0.16em',
+                  fontWeight: 800,
+                  marginTop: '3px',
+                }}
+              >
+                REAL ESTATE INVESTMENTS
+              </span>
+            </div>
           </Link>
 
           {/* Desktop Navigation Links */}
@@ -98,9 +120,6 @@ export const LandingPage: React.FC = () => {
             </a>
             <a href="#seguridad" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', fontWeight: 500, transition: 'color 150ms' }}>
               Seguridad Jurídica
-            </a>
-            <a href="#comparativa" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', fontWeight: 500, transition: 'color 150ms' }}>
-              Comparativa
             </a>
             <Link to="/app/projects" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', fontWeight: 500, transition: 'color 150ms' }}>
               Oportunidades
@@ -182,13 +201,6 @@ export const LandingPage: React.FC = () => {
               style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)', fontWeight: 500 }}
             >
               Seguridad Jurídica
-            </a>
-            <a
-              href="#comparativa"
-              onClick={() => setMobileMenuOpen(false)}
-              style={{ fontSize: 'var(--text-base)', color: 'var(--text-primary)', fontWeight: 500 }}
-            >
-              Comparativa
             </a>
             <Link
               to="/app/projects"
@@ -643,13 +655,20 @@ export const LandingPage: React.FC = () => {
             gap: '20px',
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontWeight: 800, fontSize: '18px', letterSpacing: '0.04em', color: 'var(--text-primary)' }}>
-              KREA NOVA
-            </span>
-            <span style={{ fontSize: '12px', color: 'var(--text-subtle)', marginTop: '2px' }}>
-              © 2026 Prototipo de Investigación y Proyecto Final.
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <img
+              src="/logo-sm.png"
+              alt="Krea Nova"
+              style={{ width: '36px', height: '36px', objectFit: 'contain' }}
+            />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontWeight: 800, fontSize: '18px', letterSpacing: '0.04em', color: 'var(--text-primary)' }}>
+                KREA NOVA
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--text-subtle)', marginTop: '2px' }}>
+                © 2026 Prototipo de Investigación y Proyecto Final.
+              </span>
+            </div>
           </div>
 
           <div style={{ fontSize: '12px', color: 'var(--text-subtle)', maxWidth: '480px', textAlign: 'right' }}>
