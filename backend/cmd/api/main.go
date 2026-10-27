@@ -2,27 +2,77 @@
 package main
 
 import (
+	"context"
+	"encoding/hex"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	httpgin "github.com/maurobanegas43/proyecto_final/backend/internal/adapters/inbound/http/gin"
 	"github.com/maurobanegas43/proyecto_final/backend/internal/adapters/outbound/memory"
+	"github.com/maurobanegas43/proyecto_final/backend/internal/adapters/outbound/postgres"
+	"github.com/maurobanegas43/proyecto_final/backend/internal/application/ports"
 	"github.com/maurobanegas43/proyecto_final/backend/internal/application/services"
 	"github.com/maurobanegas43/proyecto_final/backend/internal/config"
+	"github.com/maurobanegas43/proyecto_final/backend/internal/security/crypto"
 )
 
 func main() {
 	cfg := config.Load()
 
-	// Outbound adapters (in-memory until the PostgreSQL adapter lands).
-	projectRepo := memory.NewProjectRepository()
+	// 1. Cryptographic adapters (AES-256-GCM for PII & Bcrypt for passwords)
+	encKey, err := hex.DecodeString(cfg.EncryptionKeyHex)
+	if err != nil || len(encKey) != 32 {
+		log.Printf("warning: invalid or missing 32-byte encryption key in hex, using fallback 32-byte key")
+		encKey = []byte("12345678901234567890123456789012")
+	}
+	encryptor, err := crypto.NewAESGCMEncryptor(encKey)
+	if err != nil {
+		log.Fatalf("failed to initialize AES-GCM encryptor: %v", err)
+	}
+	hasher := crypto.NewBcryptHasher(12)
 
-	// Application services.
-	projectSvc := services.NewProjectService(projectRepo, memory.RandomID{}, memory.SystemClock{})
+	// 2. Outbound adapters (PostgreSQL if configured, memory fallback)
+	var (
+		projectRepo ports.ProjectRepository
+		userRepo    ports.UserRepository
+		fundRepo    ports.FundRepository
+	)
 
-	// Inbound HTTP adapter.
+	if cfg.DatabaseURL != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		pool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
+		if err != nil {
+			log.Printf("warning: postgresql connection failed (%v); falling back to memory adapter", err)
+			projectRepo = memory.NewProjectRepository()
+			userRepo = memory.NewUserRepository()
+			fundRepo = memory.NewFundRepository()
+		} else {
+			log.Println("connected to PostgreSQL successfully")
+			projectRepo = postgres.NewProjectRepository(pool)
+			userRepo = postgres.NewUserRepository(pool)
+			fundRepo = postgres.NewFundRepository(pool)
+		}
+	} else {
+		log.Println("no DATABASE_URL provided; using in-memory adapters")
+		projectRepo = memory.NewProjectRepository()
+		userRepo = memory.NewUserRepository()
+		fundRepo = memory.NewFundRepository()
+	}
+
+	idGen := memory.RandomID{}
+	clock := memory.SystemClock{}
+
+	// 3. Application services
+	projectSvc := services.NewProjectService(projectRepo, idGen, clock)
+	userSvc := services.NewUserService(userRepo, encryptor, hasher, idGen, clock)
+	fundSvc := services.NewFundService(fundRepo, projectRepo, userRepo, idGen, clock)
+
+	// 4. Inbound HTTP adapter (Gin)
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), cors(cfg.AllowedOrigin))
 
@@ -32,6 +82,8 @@ func main() {
 
 	v1 := r.Group("/api/v1")
 	httpgin.NewProjectHandler(projectSvc).Register(v1)
+	httpgin.NewUserHandler(userSvc).Register(v1)
+	httpgin.NewFundHandler(fundSvc).Register(v1)
 
 	log.Printf("api listening on :%s", cfg.Port)
 	if err := r.Run(":" + cfg.Port); err != nil {
