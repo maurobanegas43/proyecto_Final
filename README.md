@@ -1,6 +1,5 @@
 ## Krea Nova
 
-> Prototipo académico de una plataforma de **financiamiento colectivo inmobiliario** con participaciones representadas digitalmente (tokenización RWA), pensada bajo el marco normativo de la República Argentina.
 
 ![Go](https://img.shields.io/badge/Go-Gin-00ADD8?logo=go&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
