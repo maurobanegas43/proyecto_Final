@@ -2,7 +2,10 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/maurobanegas43/proyecto_final/backend/internal/application/ports"
@@ -12,17 +15,39 @@ import (
 )
 
 var (
-	ErrUserAlreadyExists = errors.New("user: email already registered")
-	ErrUserNotFound      = errors.New("user: not found")
-	ErrProfileNotFound   = errors.New("user: investor profile not found")
+	ErrUserAlreadyExists           = errors.New("user: email already registered")
+	ErrUserNotFound                = errors.New("user: not found")
+	ErrProfileNotFound             = errors.New("user: investor profile not found")
+	ErrLivenessRequired            = errors.New("user: liveness verification required for investors")
+	ErrLivenessSessionNotFound     = errors.New("user: liveness session not found")
+	ErrLivenessSessionExpired      = errors.New("user: liveness session expired")
+	ErrLivenessSessionConsumed     = errors.New("user: liveness session already consumed")
+	ErrLivenessInsufficientQuality = errors.New("user: liveness confidence below acceptable threshold")
+	ErrLivenessTokenInvalid        = errors.New("user: liveness verification token invalid")
 )
 
+type LivenessSession struct {
+	ID                string     `json:"sessionId"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	ExpiresAt         time.Time  `json:"expiresAt"`
+	Verified          bool       `json:"verified"`
+	VerifiedAt        *time.Time `json:"verifiedAt,omitempty"`
+	Confidence        float64    `json:"confidence,omitempty"`
+	ProofHash         string     `json:"proofHash,omitempty"`
+	VerificationToken string     `json:"verificationToken,omitempty"`
+	Consumed          bool       `json:"consumed"`
+}
+
 type RegisterUserCommand struct {
-	Email    string
-	Phone    string
-	Password string
-	Role     user.Role
-	UserType user.UserType
+	Email             string
+	Phone             string
+	Password          string
+	Role              user.Role
+	UserType          user.UserType
+	GoogleIDToken     string
+	LivenessSessionID string
+	LivenessToken     string
+	LivenessVerified  bool
 }
 
 type SaveInvestorProfileCommand struct {
@@ -65,11 +90,14 @@ type DecryptedInvestorProfile struct {
 }
 
 type UserService struct {
-	repo      ports.UserRepository
-	encryptor crypto.Encryptor
-	hasher    crypto.PasswordHasher
-	ids       ports.IDGenerator
-	clock     ports.Clock
+	repo             ports.UserRepository
+	encryptor        crypto.Encryptor
+	hasher           crypto.PasswordHasher
+	ids              ports.IDGenerator
+	clock            ports.Clock
+	googleVerifier   ports.GoogleTokenVerifier
+	livenessMu       sync.RWMutex
+	livenessSessions map[string]*LivenessSession
 }
 
 func NewUserService(
@@ -80,19 +108,153 @@ func NewUserService(
 	clock ports.Clock,
 ) *UserService {
 	return &UserService{
-		repo:      repo,
-		encryptor: encryptor,
-		hasher:    hasher,
-		ids:       ids,
-		clock:     clock,
+		repo:             repo,
+		encryptor:        encryptor,
+		hasher:           hasher,
+		ids:              ids,
+		clock:            clock,
+		livenessSessions: make(map[string]*LivenessSession),
 	}
 }
 
+func (s *UserService) SetGoogleVerifier(gv ports.GoogleTokenVerifier) {
+	s.googleVerifier = gv
+}
+
+func (s *UserService) VerifyGoogleIDToken(ctx context.Context, idToken string) (*ports.GoogleClaims, error) {
+	if s.googleVerifier == nil {
+		return nil, errors.New("user: google token verification not configured")
+	}
+	return s.googleVerifier.VerifyIDToken(ctx, idToken)
+}
+
+func (s *UserService) CreateLivenessSession(ctx context.Context) (*LivenessSession, error) {
+	s.livenessMu.Lock()
+	defer s.livenessMu.Unlock()
+
+	now := s.clock.Now()
+	sessionID := s.ids.NewID()
+	tokenBytes := make([]byte, 24)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return nil, errors.New("user: failed to generate liveness verification token")
+	}
+
+	session := &LivenessSession{
+		ID:                sessionID,
+		CreatedAt:         now,
+		ExpiresAt:         now.Add(10 * time.Minute),
+		Verified:          false,
+		VerificationToken: hex.EncodeToString(tokenBytes),
+		Consumed:          false,
+	}
+
+	s.livenessSessions[sessionID] = session
+	return session, nil
+}
+
+func (s *UserService) VerifyLivenessSession(ctx context.Context, sessionID, proofHash string, confidence float64) (*LivenessSession, error) {
+	s.livenessMu.Lock()
+	defer s.livenessMu.Unlock()
+
+	session, exists := s.livenessSessions[sessionID]
+	if !exists {
+		return nil, ErrLivenessSessionNotFound
+	}
+
+	now := s.clock.Now()
+	if now.After(session.ExpiresAt) {
+		return nil, ErrLivenessSessionExpired
+	}
+
+	if session.Consumed {
+		return nil, ErrLivenessSessionConsumed
+	}
+
+	if confidence < 0.70 {
+		return nil, ErrLivenessInsufficientQuality
+	}
+
+	if proofHash == "" {
+		return nil, errors.New("user: proof hash is required")
+	}
+
+	session.Verified = true
+	session.VerifiedAt = &now
+	session.Confidence = confidence
+	session.ProofHash = proofHash
+
+	return session, nil
+}
+
+func (s *UserService) GetLivenessSession(ctx context.Context, sessionID string) (*LivenessSession, error) {
+	s.livenessMu.RLock()
+	defer s.livenessMu.RUnlock()
+
+	session, exists := s.livenessSessions[sessionID]
+	if !exists {
+		return nil, ErrLivenessSessionNotFound
+	}
+	return session, nil
+}
+
+func (s *UserService) consumeLivenessSession(sessionID, token string) error {
+	s.livenessMu.Lock()
+	defer s.livenessMu.Unlock()
+
+	session, exists := s.livenessSessions[sessionID]
+	if !exists {
+		return ErrLivenessSessionNotFound
+	}
+
+	now := s.clock.Now()
+	if now.After(session.ExpiresAt) {
+		return ErrLivenessSessionExpired
+	}
+
+	if session.Consumed {
+		return ErrLivenessSessionConsumed
+	}
+
+	if !session.Verified {
+		return errors.New("user: liveness verification has not been completed")
+	}
+
+	if session.VerificationToken != token {
+		return ErrLivenessTokenInvalid
+	}
+
+	session.Consumed = true
+	return nil
+}
+
 func (s *UserService) RegisterUser(ctx context.Context, cmd RegisterUserCommand) (*user.User, error) {
+	// Liveness verification check: Never allow plain true boolean without valid verified backend session
+	if cmd.LivenessVerified {
+		if cmd.LivenessSessionID == "" || cmd.LivenessToken == "" {
+			return nil, errors.New("user: cannot claim liveness verification without a valid verified backend session")
+		}
+		if err := s.consumeLivenessSession(cmd.LivenessSessionID, cmd.LivenessToken); err != nil {
+			return nil, err
+		}
+	} else if cmd.Role == user.RoleInvestor && cmd.LivenessSessionID != "" {
+		if err := s.consumeLivenessSession(cmd.LivenessSessionID, cmd.LivenessToken); err != nil {
+			return nil, err
+		}
+	}
 	// 1. Strict format & consistency validations
 	cleanEmail, err := validation.ValidateGmail(cmd.Email)
 	if err != nil {
 		return nil, err
+	}
+
+	if cmd.GoogleIDToken != "" && s.googleVerifier != nil {
+		claims, err := s.googleVerifier.VerifyIDToken(ctx, cmd.GoogleIDToken)
+		if err != nil {
+			return nil, errors.New("user: invalid google id token: " + err.Error())
+		}
+		if claims.Email != cleanEmail {
+			return nil, errors.New("user: token email does not match registered email")
+		}
 	}
 
 	cleanPhone, err := validation.ValidateAndFormatPhone(cmd.Phone, "AR")

@@ -14,16 +14,22 @@ import {
   EyeOff,
   Sun,
   Moon,
+  X,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { INITIAL_DEVELOPERS } from '../../services/api';
+import { DeveloperProfile } from '../../types';
 import {
   validateCuitCuil,
   validateDni,
   validateAdultAge,
   validatePassword,
   validateEmail,
+  validateGmailAddress,
 } from './legalValidation';
+import { GoogleAuthButton } from './components/GoogleAuthButton';
+import { FaceLivenessVerification, LivenessProofResult } from './components/FaceLivenessVerification';
 
 export const AuthPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -35,8 +41,13 @@ export const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState<boolean>(searchParams.get('mode') !== 'register');
   const [role, setRole] = useState<'investor' | 'developer'>('investor');
 
-  // Step state for register wizard (1: Contact, 2: Legal Data, 3: Declarations)
+  // Step state for register wizard (Investor: 1: Contact, 2: FaceX Liveness, 3: Legal Data, 4: Declarations)
   const [registerStep, setRegisterStep] = useState<number>(1);
+
+  // Google GSI & FaceX Biometrics state (Investor onboarding)
+  const [googleVerifiedEmail, setGoogleVerifiedEmail] = useState<string | null>(null);
+  const [googleIdToken, setGoogleIdToken] = useState<string | null>(null);
+  const [livenessProof, setLivenessProof] = useState<LivenessProofResult | null>(null);
 
   // Common credentials state
   const [email, setEmail] = useState('');
@@ -44,6 +55,7 @@ export const AuthPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [phone, setPhone] = useState('');
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
+  const [developerModalOpen, setDeveloperModalOpen] = useState(false);
 
   // Investor specific fields
   const [fullName, setFullName] = useState('');
@@ -106,8 +118,25 @@ export const AuthPage: React.FC = () => {
 
   // Quick demo login buttons for evaluation convenience
   const handleQuickDemoLogin = (demoRole: 'investor' | 'developer') => {
-    const demoEmail = demoRole === 'investor' ? 'inversor@kreanova.capital' : 'desarrollador@kreanova.capital';
+    if (demoRole === 'developer') {
+      setDeveloperModalOpen(true);
+      return;
+    }
+    const demoEmail = 'inversor@kreanova.capital';
     login(demoEmail, demoRole);
+    navigate('/app');
+  };
+
+  const handleSelectDeveloper = (dev: DeveloperProfile) => {
+    login(dev.email, 'developer', {
+      id: dev.id,
+      name: dev.tradeName || dev.companyName,
+      legalName: dev.companyName,
+      taxId: dev.cuit,
+      companyType: dev.companyType,
+      legalRepresentative: dev.repFullName,
+    });
+    setDeveloperModalOpen(false);
     navigate('/app');
   };
 
@@ -125,9 +154,16 @@ export const AuthPage: React.FC = () => {
       }
     }
 
-    const emailCheck = validateEmail(email);
-    if (!emailCheck.isValid) {
-      errors.email = emailCheck.message || 'Email inválido';
+    if (role === 'investor') {
+      const emailCheck = validateGmailAddress(email);
+      if (!emailCheck.isValid) {
+        errors.email = emailCheck.message || 'Se requiere una casilla @gmail.com válida para inversores';
+      }
+    } else {
+      const emailCheck = validateEmail(email);
+      if (!emailCheck.isValid) {
+        errors.email = emailCheck.message || 'Email inválido';
+      }
     }
 
     const pwdCheck = validatePassword(password);
@@ -227,6 +263,12 @@ export const AuthPage: React.FC = () => {
     }
 
     if (role === 'investor') {
+      if (!livenessProof) {
+        setFormErrors({ liveness: 'Debe completar la prueba de vida biométrica para registrarse.' });
+        setRegisterStep(2);
+        return;
+      }
+
       registerInvestor({
         fullName,
         email,
@@ -242,6 +284,11 @@ export const AuthPage: React.FC = () => {
         fundsOrigin,
         termsAccepted,
         privacyAccepted,
+        googleIdToken: googleIdToken || undefined,
+        livenessVerified: true,
+        livenessProofHash: livenessProof.proofHash,
+        livenessSessionId: livenessProof.sessionId,
+        livenessToken: livenessProof.verificationToken,
       });
     } else {
       registerCorporate({
@@ -365,18 +412,6 @@ export const AuthPage: React.FC = () => {
             }}
           >
             KREA NOVA
-          </span>
-          <span
-            style={{
-              fontSize: '10px',
-              fontWeight: 800,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-              color: 'var(--brand-gold)',
-              marginTop: '4px',
-            }}
-          >
-            REAL ESTATE INVESTMENTS
           </span>
         </div>
       </Link>
@@ -756,6 +791,154 @@ export const AuthPage: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* Modal de Inmobiliarias / Desarrolladoras Registradas */}
+            {developerModalOpen && (
+              <div
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(0,0,0,0.75)',
+                  backdropFilter: 'blur(6px)',
+                  display: 'grid',
+                  placeItems: 'center',
+                  zIndex: 110,
+                  padding: '20px',
+                }}
+                onClick={() => setDeveloperModalOpen(false)}
+              >
+                <div
+                  style={{
+                    maxWidth: '680px',
+                    width: '100%',
+                    maxHeight: '85vh',
+                    overflowY: 'auto',
+                    background: 'var(--surface-card)',
+                    borderRadius: '24px',
+                    padding: '28px',
+                    border: '1px solid var(--surface-glass-border)',
+                    boxShadow: 'var(--shadow-elevation)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '20px',
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <Building2 size={20} style={{ color: 'var(--brand-gold)' }} />
+                        <h3 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                          Cuentas de Inmobiliarias & Desarrolladoras
+                        </h3>
+                      </div>
+                      <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+                        Seleccioná una de las desarrolladoras homologadas para ingresar a la plataforma y gestionar proyectos.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setDeveloperModalOpen(false)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                      }}
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gap: '12px' }}>
+                    {INITIAL_DEVELOPERS.map((dev) => (
+                      <div
+                        key={dev.id}
+                        style={{
+                          background: 'var(--color-surface-raised)',
+                          border: '1px solid var(--surface-glass-border)',
+                          borderRadius: '16px',
+                          padding: '16px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px',
+                          transition: 'border-color var(--transition-fast)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
+                                {dev.tradeName}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '2px 8px',
+                                  borderRadius: '999px',
+                                  background: 'var(--surface-card)',
+                                  border: '1px solid var(--surface-glass-border)',
+                                  color: 'var(--text-muted)',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {dev.companyType}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                              {dev.companyName} • CUIT: <strong className="mono">{dev.cuit}</strong>
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSelectDeveloper(dev)}
+                            className="btn-primary"
+                            style={{
+                              padding: '8px 16px',
+                              borderRadius: '10px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              flexShrink: 0,
+                            }}
+                          >
+                            Ingresar
+                          </button>
+                        </div>
+
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                            gap: '8px',
+                            fontSize: '11px',
+                            color: 'var(--text-muted)',
+                            paddingTop: '8px',
+                            borderTop: '1px solid var(--surface-glass-border)',
+                          }}
+                        >
+                          <div>
+                            <span style={{ color: 'var(--text-subtle)' }}>Representante: </span>
+                            <span style={{ color: 'var(--text-primary)' }}>{dev.repFullName}</span>
+                          </div>
+                          <div>
+                            <span style={{ color: 'var(--text-subtle)' }}>M² Entregados: </span>
+                            <strong style={{ color: 'var(--brand-gold)' }}>+{dev.deliveredM2.toLocaleString()} m²</strong>
+                          </div>
+                          <div style={{ gridColumn: '1 / -1' }}>
+                            <span style={{ color: 'var(--text-subtle)' }}>Foco: </span>
+                            <span>{dev.specialty}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* ---------------- REGISTER VIEW (DUAL PROFILES) ---------------- */
@@ -853,26 +1036,60 @@ export const AuthPage: React.FC = () => {
                 fontWeight: 600,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: registerStep >= 1 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: registerStep >= 1 ? 'var(--btn-primary-bg)' : 'var(--surface-card)', color: registerStep >= 1 ? 'var(--btn-primary-text)' : 'var(--text-muted)', display: 'grid', placeItems: 'center', fontSize: '11px' }}>
-                  1
-                </span>
-                <span>Contacto</span>
-              </div>
-              <div style={{ height: '1px', flex: 1, margin: '0 10px', background: 'var(--surface-glass-border)' }} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: registerStep >= 2 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: registerStep >= 2 ? 'var(--btn-primary-bg)' : 'var(--surface-card)', color: registerStep >= 2 ? 'var(--btn-primary-text)' : 'var(--text-muted)', display: 'grid', placeItems: 'center', fontSize: '11px' }}>
-                  2
-                </span>
-                <span>Datos Legales</span>
-              </div>
-              <div style={{ height: '1px', flex: 1, margin: '0 10px', background: 'var(--surface-glass-border)' }} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: registerStep >= 3 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: registerStep >= 3 ? 'var(--btn-primary-bg)' : 'var(--surface-card)', color: registerStep >= 3 ? 'var(--btn-primary-text)' : 'var(--text-muted)', display: 'grid', placeItems: 'center', fontSize: '11px' }}>
-                  3
-                </span>
-                <span>Declaraciones</span>
-              </div>
+              {role === 'investor' ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: registerStep >= 1 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                    <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: registerStep >= 1 ? 'var(--btn-primary-bg)' : 'var(--surface-card)', color: registerStep >= 1 ? 'var(--btn-primary-text)' : 'var(--text-muted)', display: 'grid', placeItems: 'center', fontSize: '11px' }}>
+                      1
+                    </span>
+                    <span>Contacto</span>
+                  </div>
+                  <div style={{ height: '1px', flex: 1, margin: '0 6px', background: 'var(--surface-glass-border)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: registerStep >= 2 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                    <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: registerStep >= 2 ? 'var(--btn-primary-bg)' : 'var(--surface-card)', color: registerStep >= 2 ? 'var(--btn-primary-text)' : 'var(--text-muted)', display: 'grid', placeItems: 'center', fontSize: '11px' }}>
+                      2
+                    </span>
+                    <span>Biometría</span>
+                  </div>
+                  <div style={{ height: '1px', flex: 1, margin: '0 6px', background: 'var(--surface-glass-border)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: registerStep >= 3 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                    <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: registerStep >= 3 ? 'var(--btn-primary-bg)' : 'var(--surface-card)', color: registerStep >= 3 ? 'var(--btn-primary-text)' : 'var(--text-muted)', display: 'grid', placeItems: 'center', fontSize: '11px' }}>
+                      3
+                    </span>
+                    <span>Legales</span>
+                  </div>
+                  <div style={{ height: '1px', flex: 1, margin: '0 6px', background: 'var(--surface-glass-border)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: registerStep >= 4 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                    <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: registerStep >= 4 ? 'var(--btn-primary-bg)' : 'var(--surface-card)', color: registerStep >= 4 ? 'var(--btn-primary-text)' : 'var(--text-muted)', display: 'grid', placeItems: 'center', fontSize: '11px' }}>
+                      4
+                    </span>
+                    <span>Declaraciones</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: registerStep >= 1 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                    <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: registerStep >= 1 ? 'var(--btn-primary-bg)' : 'var(--surface-card)', color: registerStep >= 1 ? 'var(--btn-primary-text)' : 'var(--text-muted)', display: 'grid', placeItems: 'center', fontSize: '11px' }}>
+                      1
+                    </span>
+                    <span>Contacto</span>
+                  </div>
+                  <div style={{ height: '1px', flex: 1, margin: '0 10px', background: 'var(--surface-glass-border)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: registerStep >= 2 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                    <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: registerStep >= 2 ? 'var(--btn-primary-bg)' : 'var(--surface-card)', color: registerStep >= 2 ? 'var(--btn-primary-text)' : 'var(--text-muted)', display: 'grid', placeItems: 'center', fontSize: '11px' }}>
+                      2
+                    </span>
+                    <span>Datos Legales</span>
+                  </div>
+                  <div style={{ height: '1px', flex: 1, margin: '0 10px', background: 'var(--surface-glass-border)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: registerStep >= 3 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                    <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: registerStep >= 3 ? 'var(--btn-primary-bg)' : 'var(--surface-card)', color: registerStep >= 3 ? 'var(--btn-primary-text)' : 'var(--text-muted)', display: 'grid', placeItems: 'center', fontSize: '11px' }}>
+                      3
+                    </span>
+                    <span>Declaraciones</span>
+                  </div>
+                </>
+              )}
             </div>
 
             <form onSubmit={handleRegisterSubmit}>
@@ -967,32 +1184,75 @@ export const AuthPage: React.FC = () => {
                     </>
                   )}
 
+                  {role === 'investor' && (
+                    <div style={{ marginBottom: '4px' }}>
+                      <GoogleAuthButton
+                        verifiedEmail={googleVerifiedEmail}
+                        onSuccess={(data) => {
+                          setGoogleVerifiedEmail(data.email);
+                          setEmail(data.email);
+                          setGoogleIdToken(data.idToken);
+                          if (!fullName && data.name) {
+                            setFullName(data.name);
+                          }
+                          setFormErrors((prev) => {
+                            const copy = { ...prev };
+                            delete copy.email;
+                            return copy;
+                          });
+                        }}
+                        onError={(err) => {
+                          setFormErrors((prev) => ({ ...prev, googleAuth: err }));
+                        }}
+                      />
+                    </div>
+                  )}
+
                   <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
-                      Correo Electrónico Oficial *
-                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: 600 }}>
+                        {role === 'investor' ? 'Correo Electrónico Gmail *' : 'Correo Electrónico Oficial *'}
+                      </label>
+                      {role === 'investor' && googleVerifiedEmail && (
+                        <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <ShieldCheck size={14} /> Casilla Verificada
+                        </span>
+                      )}
+                    </div>
                     <div style={{ position: 'relative' }}>
                       <input
                         type="email"
                         required
-                        placeholder="contacto@dominio.com"
+                        placeholder={role === 'investor' ? 'ejemplo@gmail.com' : 'contacto@dominio.com'}
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          if (googleVerifiedEmail && e.target.value !== googleVerifiedEmail) {
+                            setGoogleVerifiedEmail(null);
+                            setGoogleIdToken(null);
+                          }
+                        }}
                         style={{
                           width: '100%',
                           height: '44px',
                           paddingLeft: '40px',
                           paddingRight: '14px',
                           borderRadius: '10px',
-                          background: 'var(--color-surface-raised)',
-                          border: `1px solid ${formErrors.email ? '#ef4444' : 'var(--surface-glass-border)'}`,
+                          background: role === 'investor' && googleVerifiedEmail ? 'rgba(16, 185, 129, 0.08)' : 'var(--color-surface-raised)',
+                          border: `1px solid ${
+                            formErrors.email
+                              ? '#ef4444'
+                              : role === 'investor' && googleVerifiedEmail
+                              ? '#10b981'
+                              : 'var(--surface-glass-border)'
+                          }`,
                           color: 'var(--text-primary)',
                           fontSize: '14px',
                           outline: 'none',
                           boxSizing: 'border-box',
                         }}
                       />
-                      <Mail size={16} style={{ position: 'absolute', left: '14px', top: '14px', color: 'var(--text-muted)' }} />
+                      <Mail size={16} style={{ position: 'absolute', left: '14px', top: '14px', color: role === 'investor' && googleVerifiedEmail ? '#10b981' : 'var(--text-muted)' }} />
                     </div>
                     {formErrors.email && <span style={{ fontSize: '11px', color: '#ef4444' }}>{formErrors.email}</span>}
                   </div>
@@ -1072,14 +1332,84 @@ export const AuthPage: React.FC = () => {
                     className="btn-primary"
                     style={{ height: '46px', marginTop: '12px', borderRadius: '10px', gap: '8px' }}
                   >
-                    <span>Continuar a Datos Legales</span>
+                    <span>{role === 'investor' ? 'Continuar a Prueba de Vida' : 'Continuar a Datos Legales'}</span>
                     <ArrowRight size={16} />
                   </button>
                 </div>
               )}
 
-              {/* STEP 2: Datos Legales e Identificación (Diferenciados) */}
-              {registerStep === 2 && (
+              {/* STEP 2 (Investor Only): Prueba de Vida Biométrica con Cámara (FaceX) */}
+              {role === 'investor' && registerStep === 2 && (
+                <div style={{ display: 'grid', gap: '16px' }}>
+                  <FaceLivenessVerification
+                    isVerified={!!livenessProof}
+                    onCancel={() => setRegisterStep(1)}
+                    onVerified={(proof) => {
+                      setLivenessProof(proof);
+                      setFormErrors((prev) => {
+                        const copy = { ...prev };
+                        delete copy.liveness;
+                        return copy;
+                      });
+                    }}
+                  />
+
+                  {formErrors.liveness && (
+                    <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', fontSize: '12px' }}>
+                      {formErrors.liveness}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setRegisterStep(1)}
+                      style={{
+                        flex: 1,
+                        height: '46px',
+                        borderRadius: '10px',
+                        background: 'transparent',
+                        border: '1px solid var(--surface-glass-border)',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Atrás
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!livenessProof}
+                      onClick={() => {
+                        if (!livenessProof) {
+                          setFormErrors((prev) => ({
+                            ...prev,
+                            liveness: 'Debe completar la prueba de vida biométrica para avanzar.',
+                          }));
+                          return;
+                        }
+                        setRegisterStep(3);
+                      }}
+                      className="btn-primary"
+                      style={{
+                        flex: 2,
+                        height: '46px',
+                        borderRadius: '10px',
+                        gap: '8px',
+                        opacity: livenessProof ? 1 : 0.6,
+                        cursor: livenessProof ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      <span>Continuar a Datos Legales</span>
+                      <ArrowRight size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP: Datos Legales e Identificación (Investor: 3, Developer: 2) */}
+              {((role === 'investor' && registerStep === 3) || (role === 'developer' && registerStep === 2)) && (
                 <div style={{ display: 'grid', gap: '16px' }}>
                   {role === 'investor' ? (
                     <>
@@ -1432,7 +1762,7 @@ export const AuthPage: React.FC = () => {
                   <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
                     <button
                       type="button"
-                      onClick={() => setRegisterStep(1)}
+                      onClick={() => setRegisterStep(role === 'investor' ? 2 : 1)}
                       style={{
                         flex: 1,
                         height: '46px',
@@ -1450,7 +1780,7 @@ export const AuthPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        if (validateStep2()) setRegisterStep(3);
+                        if (validateStep2()) setRegisterStep(role === 'investor' ? 4 : 3);
                       }}
                       className="btn-primary"
                       style={{ flex: 2, height: '46px', borderRadius: '10px', gap: '8px' }}
@@ -1462,8 +1792,8 @@ export const AuthPage: React.FC = () => {
                 </div>
               )}
 
-              {/* STEP 3: Declaraciones Juradas y Consentimientos (Obligatorios legal.md) */}
-              {registerStep === 3 && (
+              {/* STEP: Declaraciones Juradas y Consentimientos (Investor: 4, Developer: 3) */}
+              {((role === 'investor' && registerStep === 4) || (role === 'developer' && registerStep === 3)) && (
                 <div style={{ display: 'grid', gap: '18px' }}>
                   {/* Origen de fondos & PEP */}
                   <div
@@ -1675,7 +2005,7 @@ export const AuthPage: React.FC = () => {
                   <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
                     <button
                       type="button"
-                      onClick={() => setRegisterStep(2)}
+                      onClick={() => setRegisterStep(role === 'investor' ? 3 : 2)}
                       style={{
                         flex: 1,
                         height: '46px',

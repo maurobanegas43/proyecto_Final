@@ -3,6 +3,7 @@ package gin
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -11,11 +12,25 @@ import (
 )
 
 type registerRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Phone    string `json:"phone" binding:"required"`
-	Password string `json:"password" binding:"required,min=8,max=72"`
-	Role     string `json:"role" binding:"required,oneof=investor developer admin"`
-	UserType string `json:"userType" binding:"required,oneof=individual corporate"`
+	Email             string `json:"email" binding:"required,email"`
+	Phone             string `json:"phone" binding:"required"`
+	Password          string `json:"password" binding:"required,min=8,max=72"`
+	Role              string `json:"role" binding:"required,oneof=investor developer admin"`
+	UserType          string `json:"userType" binding:"required,oneof=individual corporate"`
+	GoogleIDToken     string `json:"googleIdToken"`
+	LivenessSessionID string `json:"livenessSessionId"`
+	LivenessToken     string `json:"livenessToken"`
+	LivenessVerified  bool   `json:"livenessVerified"`
+}
+
+type verifyGoogleRequest struct {
+	IDToken string `json:"idToken" binding:"required"`
+}
+
+type verifyLivenessRequest struct {
+	SessionID  string  `json:"sessionId" binding:"required"`
+	ProofHash  string  `json:"proofHash" binding:"required"`
+	Confidence float64 `json:"confidence" binding:"required"`
 }
 
 type investorProfileRequest struct {
@@ -58,6 +73,92 @@ func (h *UserHandler) Register(rg *gin.RouterGroup) {
 	g.POST("/:id/consents", h.recordConsent)
 }
 
+func (h *UserHandler) RegisterAuthRoutes(rg *gin.RouterGroup) {
+	g := rg.Group("/auth")
+	g.POST("/google/verify", h.verifyGoogleToken)
+	g.POST("/liveness/session", h.createLivenessSession)
+	g.POST("/liveness/verify", h.verifyLiveness)
+	g.GET("/liveness/session/:id", h.getLivenessSession)
+}
+
+func (h *UserHandler) createLivenessSession(c *gin.Context) {
+	session, err := h.svc.CreateLivenessSession(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResponse{Code: "LIVENESS_SESSION_FAILED", Message: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"sessionId": session.ID,
+		"expiresAt": session.ExpiresAt.Format(time.RFC3339),
+	})
+}
+
+func (h *UserHandler) verifyLiveness(c *gin.Context) {
+	var req verifyLivenessRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errorResponse{Code: "INVALID_REQUEST", Message: err.Error()})
+		return
+	}
+
+	session, err := h.svc.VerifyLivenessSession(c.Request.Context(), req.SessionID, req.ProofHash, req.Confidence)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, services.ErrLivenessSessionNotFound) {
+			status = http.StatusNotFound
+		} else if errors.Is(err, services.ErrLivenessSessionExpired) || errors.Is(err, services.ErrLivenessSessionConsumed) {
+			status = http.StatusGone
+		}
+		c.JSON(status, errorResponse{Code: "LIVENESS_VERIFICATION_FAILED", Message: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"verified":          session.Verified,
+		"sessionId":         session.ID,
+		"verificationToken": session.VerificationToken,
+		"verifiedAt":        session.VerifiedAt.Format(time.RFC3339),
+	})
+}
+
+func (h *UserHandler) getLivenessSession(c *gin.Context) {
+	sessionID := c.Param("id")
+	session, err := h.svc.GetLivenessSession(c.Request.Context(), sessionID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, errorResponse{Code: "SESSION_NOT_FOUND", Message: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"sessionId": session.ID,
+		"verified":  session.Verified,
+		"expiresAt": session.ExpiresAt.Format(time.RFC3339),
+		"consumed":  session.Consumed,
+	})
+}
+
+func (h *UserHandler) verifyGoogleToken(c *gin.Context) {
+	var req verifyGoogleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, errorResponse{Code: "INVALID_REQUEST", Message: err.Error()})
+		return
+	}
+
+	claims, err := h.svc.VerifyGoogleIDToken(c.Request.Context(), req.IDToken)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, errorResponse{Code: "GOOGLE_TOKEN_INVALID", Message: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"email":         claims.Email,
+		"emailVerified": claims.EmailVerified,
+		"name":          claims.Name,
+		"picture":       claims.Picture,
+		"subject":       claims.Subject,
+	})
+}
+
 func (h *UserHandler) register(c *gin.Context) {
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -66,11 +167,15 @@ func (h *UserHandler) register(c *gin.Context) {
 	}
 
 	u, err := h.svc.RegisterUser(c.Request.Context(), services.RegisterUserCommand{
-		Email:    req.Email,
-		Phone:    req.Phone,
-		Password: req.Password,
-		Role:     user.Role(req.Role),
-		UserType: user.UserType(req.UserType),
+		Email:             req.Email,
+		Phone:             req.Phone,
+		Password:          req.Password,
+		Role:              user.Role(req.Role),
+		UserType:          user.UserType(req.UserType),
+		GoogleIDToken:     req.GoogleIDToken,
+		LivenessSessionID: req.LivenessSessionID,
+		LivenessToken:     req.LivenessToken,
+		LivenessVerified:  req.LivenessVerified,
 	})
 	if err != nil {
 		if errors.Is(err, services.ErrUserAlreadyExists) {

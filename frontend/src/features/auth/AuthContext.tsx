@@ -17,6 +17,8 @@ export interface User {
   kycStatus: KycStatus;
   isKycVerified: boolean;
   pepDeclared: boolean;
+  livenessVerified?: boolean;
+  googleVerified?: boolean;
   termsAcceptedAt: string;
   privacyAcceptedAt: string;
 }
@@ -36,6 +38,11 @@ interface RegisterInvestorPayload {
   fundsOrigin: string;
   termsAccepted: boolean;
   privacyAccepted: boolean;
+  googleIdToken?: string;
+  livenessVerified?: boolean;
+  livenessProofHash?: string;
+  livenessSessionId?: string;
+  livenessToken?: string;
 }
 
 interface RegisterCorporatePayload {
@@ -59,7 +66,7 @@ interface RegisterCorporatePayload {
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, role?: UserRole) => void;
+  login: (email: string, role?: UserRole, extra?: Partial<User>) => void;
   registerInvestor: (payload: RegisterInvestorPayload) => void;
   registerCorporate: (payload: RegisterCorporatePayload) => void;
   logout: () => void;
@@ -72,18 +79,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Always start unauthenticated by default so fresh visits are public
   const [user, setUser] = useState<User | null>(null);
 
-  const login = (email: string, role: UserRole = 'investor') => {
+  const login = (email: string, role: UserRole = 'investor', extra?: Partial<User>) => {
     const newUser: User = {
-      id: 'usr-' + Math.random().toString(36).substring(2, 7),
-      name: email.split('@')[0].toUpperCase(),
+      id: extra?.id || 'usr-' + Math.random().toString(36).substring(2, 7),
+      name: extra?.name || email.split('@')[0].toUpperCase(),
       email,
       role,
       userType: role === 'developer' ? 'corporate' : 'individual',
+      taxId: extra?.taxId,
+      legalName: extra?.legalName,
+      companyType: extra?.companyType,
+      legalRepresentative: extra?.legalRepresentative,
       kycStatus: 'verified',
       isKycVerified: true,
       pepDeclared: false,
       termsAcceptedAt: new Date().toISOString(),
       privacyAcceptedAt: new Date().toISOString(),
+      ...extra,
     };
     setUser(newUser);
   };
@@ -100,6 +112,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       kycStatus: 'verified', // Simulation: auto-verified for prototype
       isKycVerified: true,
       pepDeclared: payload.isPep,
+      livenessVerified: payload.livenessVerified ?? true,
+      googleVerified: !!payload.googleIdToken,
       termsAcceptedAt: new Date().toISOString(),
       privacyAcceptedAt: new Date().toISOString(),
     };

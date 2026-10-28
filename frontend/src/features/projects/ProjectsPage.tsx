@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   X,
   Building2,
+  Camera,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Project } from '../../types';
@@ -24,13 +25,14 @@ export const ProjectsPage: React.FC = () => {
   const filteredProjects = projects.filter((p) => {
     const matchesFilter =
       filter === 'all' ||
-      (filter === 'residential' && (p.category?.includes('Residencial') || p.name.includes('Residencias') || p.name.includes('Coliving'))) ||
-      (filter === 'corporate' && (p.category?.includes('Corporativo') || p.category?.includes('Logística') || p.name.includes('Torre') || p.name.includes('Parque')));
+      (filter === 'residential' && (p.category?.includes('Residencial') || p.name.includes('Residencias') || p.name.includes('Coliving') || p.category?.includes('Turismo'))) ||
+      (filter === 'corporate' && (p.category?.includes('Corporativo') || p.category?.includes('Logística') || p.name.includes('Torre') || p.name.includes('Parque') || p.category?.includes('Usos Mixtos')));
 
     const matchesSearch =
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.description.toLowerCase().includes(searchTerm.toLowerCase());
+      p.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.developerName ? p.developerName.toLowerCase().includes(searchTerm.toLowerCase()) : false);
 
     return matchesFilter && matchesSearch;
   });
@@ -312,6 +314,31 @@ export const ProjectsPage: React.FC = () => {
                   }}
                 />
 
+                {/* Photo Count Badge */}
+                {p.images && p.images.length > 0 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '16px',
+                      left: '16px',
+                      background: 'rgba(9, 9, 11, 0.82)',
+                      backdropFilter: 'blur(8px)',
+                      color: '#ffffff',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      padding: '5px 10px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      border: '1px solid rgba(255, 255, 255, 0.18)',
+                    }}
+                  >
+                    <Camera size={13} style={{ color: 'var(--brand-gold)' }} />
+                    <span>{p.images.length} fotos</span>
+                  </div>
+                )}
+
                 {/* Floating APY Pill */}
                 <div
                   style={{
@@ -366,6 +393,32 @@ export const ProjectsPage: React.FC = () => {
                 }}
               >
                 <div>
+                  {p.developerName && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        marginBottom: '6px',
+                        fontSize: '11px',
+                        color: 'var(--text-muted)',
+                      }}
+                    >
+                      <Building2 size={13} style={{ color: 'var(--brand-gold)', flexShrink: 0 }} />
+                      <span
+                        style={{
+                          fontWeight: 600,
+                          color: 'var(--text-primary)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {p.developerName}
+                      </span>
+                      <ShieldCheck size={13} style={{ color: '#10b981', flexShrink: 0 }} />
+                    </div>
+                  )}
                   <h2
                     style={{
                       fontSize: '1.3rem',

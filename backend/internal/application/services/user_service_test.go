@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/maurobanegas43/proyecto_final/backend/internal/adapters/outbound/memory"
+	"github.com/maurobanegas43/proyecto_final/backend/internal/application/ports"
 	"github.com/maurobanegas43/proyecto_final/backend/internal/application/services"
 	"github.com/maurobanegas43/proyecto_final/backend/internal/domain/user"
 	"github.com/maurobanegas43/proyecto_final/backend/internal/security/crypto"
@@ -165,6 +166,150 @@ func TestUserService_ValidationFailures(t *testing.T) {
 	})
 	if err == nil {
 		t.Errorf("expected error for weak password")
+	}
+}
+
+type mockGoogleVerifier struct {
+	email string
+	err   error
+}
+
+func (m *mockGoogleVerifier) VerifyIDToken(ctx context.Context, idToken string) (*ports.GoogleClaims, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &ports.GoogleClaims{
+		Email:         m.email,
+		EmailVerified: true,
+		Subject:       "google-sub-123",
+		Name:          "Carlos Perez",
+	}, nil
+}
+
+func TestUserService_RegisterWithGoogleToken(t *testing.T) {
+	ctx := context.Background()
+	userRepo := memory.NewUserRepository()
+	key := []byte("12345678901234567890123456789012")
+	encryptor, _ := crypto.NewAESGCMEncryptor(key)
+	hasher := crypto.NewBcryptHasher(10)
+	idGen := memory.RandomID{}
+	clock := memory.SystemClock{}
+
+	svc := services.NewUserService(userRepo, encryptor, hasher, idGen, clock)
+	svc.SetGoogleVerifier(&mockGoogleVerifier{email: "googleuser@gmail.com"})
+
+	// Success match
+	u, err := svc.RegisterUser(ctx, services.RegisterUserCommand{
+		Email:         "googleuser@gmail.com",
+		Phone:         "+5491112345678",
+		Password:      "SecurePassword123!",
+		Role:          user.RoleInvestor,
+		UserType:      user.UserTypeIndividual,
+		GoogleIDToken: "valid-sample-token",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error registering user with valid token: %v", err)
+	}
+	if u.Email != "googleuser@gmail.com" {
+		t.Errorf("expected email googleuser@gmail.com, got %s", u.Email)
+	}
+
+	// Mismatched email
+	_, err = svc.RegisterUser(ctx, services.RegisterUserCommand{
+		Email:         "otheruser@gmail.com",
+		Phone:         "+5491112345678",
+		Password:      "SecurePassword123!",
+		Role:          user.RoleInvestor,
+		UserType:      user.UserTypeIndividual,
+		GoogleIDToken: "valid-sample-token",
+	})
+	if err == nil {
+		t.Fatalf("expected error for mismatched token email")
+	}
+}
+
+func TestUserService_LivenessSessionLifecycleAndSecurity(t *testing.T) {
+	ctx := context.Background()
+	userRepo := memory.NewUserRepository()
+	key := []byte("12345678901234567890123456789012")
+	encryptor, _ := crypto.NewAESGCMEncryptor(key)
+	hasher := crypto.NewBcryptHasher(10)
+	idGen := memory.RandomID{}
+	clock := memory.SystemClock{}
+
+	svc := services.NewUserService(userRepo, encryptor, hasher, idGen, clock)
+
+	// 1. Create session
+	session, err := svc.CreateLivenessSession(ctx)
+	if err != nil {
+		t.Fatalf("failed to create liveness session: %v", err)
+	}
+	if session.ID == "" || session.VerificationToken == "" {
+		t.Fatalf("session missing ID or verification token")
+	}
+	if session.Verified {
+		t.Errorf("new session must not be verified initially")
+	}
+
+	// 2. Reject registration if livenessVerified is claimed without valid session
+	_, err = svc.RegisterUser(ctx, services.RegisterUserCommand{
+		Email:            "investor1@gmail.com",
+		Phone:            "+5491112345678",
+		Password:         "SecurePassword123!",
+		Role:             user.RoleInvestor,
+		UserType:         user.UserTypeIndividual,
+		LivenessVerified: true, // No session provided!
+	})
+	if err == nil {
+		t.Fatalf("expected error when claiming livenessVerified without session ID/token")
+	}
+
+	// 3. Reject verify with insufficient confidence
+	_, err = svc.VerifyLivenessSession(ctx, session.ID, "hash-proof-123", 0.5)
+	if err == nil {
+		t.Fatalf("expected error for low confidence")
+	}
+
+	// 4. Verify session successfully
+	verifiedSession, err := svc.VerifyLivenessSession(ctx, session.ID, "hash-proof-123", 0.95)
+	if err != nil {
+		t.Fatalf("unexpected error verifying session: %v", err)
+	}
+	if !verifiedSession.Verified {
+		t.Fatalf("session must be marked verified")
+	}
+
+	// 5. Register user with valid session and token
+	u, err := svc.RegisterUser(ctx, services.RegisterUserCommand{
+		Email:             "investor1@gmail.com",
+		Phone:             "+5491112345678",
+		Password:          "SecurePassword123!",
+		Role:              user.RoleInvestor,
+		UserType:          user.UserTypeIndividual,
+		LivenessSessionID: verifiedSession.ID,
+		LivenessToken:     verifiedSession.VerificationToken,
+		LivenessVerified:  true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error registering with verified session: %v", err)
+	}
+	if u.Email != "investor1@gmail.com" {
+		t.Errorf("expected email investor1@gmail.com, got %s", u.Email)
+	}
+
+	// 6. Anti-replay attack: Reusing consumed session must fail
+	_, err = svc.RegisterUser(ctx, services.RegisterUserCommand{
+		Email:             "investor2@gmail.com",
+		Phone:             "+5491112345679",
+		Password:          "SecurePassword123!",
+		Role:              user.RoleInvestor,
+		UserType:          user.UserTypeIndividual,
+		LivenessSessionID: verifiedSession.ID,
+		LivenessToken:     verifiedSession.VerificationToken,
+		LivenessVerified:  true,
+	})
+	if err == nil {
+		t.Fatalf("expected error when attempting replay of consumed liveness session")
 	}
 }
 

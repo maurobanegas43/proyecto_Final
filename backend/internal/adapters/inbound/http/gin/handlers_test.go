@@ -2,7 +2,9 @@ package gin_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +14,7 @@ import (
 
 	httpgin "github.com/maurobanegas43/proyecto_final/backend/internal/adapters/inbound/http/gin"
 	"github.com/maurobanegas43/proyecto_final/backend/internal/adapters/outbound/memory"
+	"github.com/maurobanegas43/proyecto_final/backend/internal/application/ports"
 	"github.com/maurobanegas43/proyecto_final/backend/internal/application/services"
 	"github.com/maurobanegas43/proyecto_final/backend/internal/domain/project"
 	"github.com/maurobanegas43/proyecto_final/backend/internal/domain/user"
@@ -37,7 +40,9 @@ func setupTestRouter() (*gin.Engine, *services.UserService, *services.FundServic
 	projectSvc := services.NewProjectService(projectRepo, idGen, clock)
 
 	v1 := r.Group("/api/v1")
-	httpgin.NewUserHandler(userSvc).Register(v1)
+	userH := httpgin.NewUserHandler(userSvc)
+	userH.Register(v1)
+	userH.RegisterAuthRoutes(v1)
 	httpgin.NewFundHandler(fundSvc).Register(v1)
 	httpgin.NewProjectHandler(projectSvc).Register(v1)
 
@@ -148,6 +153,128 @@ func TestUserAndFundEndpoints_E2E(t *testing.T) {
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("expected 201 Created on investment after KYC verified, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+type mockAuthGoogleVerifier struct{}
+
+func (m *mockAuthGoogleVerifier) VerifyIDToken(ctx context.Context, idToken string) (*ports.GoogleClaims, error) {
+	if idToken == "valid-token" {
+		return &ports.GoogleClaims{
+			Email:         "verified.investor@gmail.com",
+			EmailVerified: true,
+			Subject:       "sub-12345",
+			Name:          "Verified Investor",
+		}, nil
+	}
+	return nil, errors.New("invalid token")
+}
+
+func TestGoogleAuthEndpoint(t *testing.T) {
+	r, userSvc, _, _ := setupTestRouter()
+	userSvc.SetGoogleVerifier(&mockAuthGoogleVerifier{})
+
+	// 1. Invalid payload
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/google/verify", bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request, got %d", w.Code)
+	}
+
+	// 2. Invalid token
+	payload, _ := json.Marshal(map[string]string{"idToken": "bad-token"})
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/google/verify", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 Unauthorized, got %d", w.Code)
+	}
+
+	// 3. Valid token
+	payload, _ = json.Marshal(map[string]string{"idToken": "valid-token"})
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/google/verify", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", w.Code)
+	}
+
+	var res map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &res)
+	if res["email"] != "verified.investor@gmail.com" {
+		t.Errorf("expected email verified.investor@gmail.com, got %v", res["email"])
+	}
+}
+
+func TestLivenessEndpoints_Flow(t *testing.T) {
+	r, _, _, _ := setupTestRouter()
+
+	// 1. Create liveness session: POST /api/v1/auth/liveness/session
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/liveness/session", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created on liveness session creation, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var sessionResp map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &sessionResp)
+	sessionID, ok := sessionResp["sessionId"].(string)
+	if !ok || sessionID == "" {
+		t.Fatalf("missing sessionId in response")
+	}
+
+	// 2. Query status: GET /api/v1/auth/liveness/session/:id
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/auth/liveness/session/"+sessionID, nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on get liveness session, got %d", w.Code)
+	}
+
+	// 3. Verify session with proof: POST /api/v1/auth/liveness/verify
+	verifyPayload, _ := json.Marshal(map[string]interface{}{
+		"sessionId":  sessionID,
+		"proofHash":  "facex-proof-abc123xyz",
+		"confidence": 0.98,
+	})
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/liveness/verify", bytes.NewReader(verifyPayload))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on verify liveness, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var verifyResp map[string]interface{}
+	_ = json.Unmarshal(w.Body.Bytes(), &verifyResp)
+	token, ok := verifyResp["verificationToken"].(string)
+	if !ok || token == "" {
+		t.Fatalf("expected verificationToken in response")
+	}
+
+	// 4. Register investor using verified liveness session
+	regPayload := map[string]interface{}{
+		"email":             "investor.liveness@gmail.com",
+		"phone":             "+54 9 11 1234-5678",
+		"password":          "Password1234!",
+		"role":              "investor",
+		"userType":          "individual",
+		"livenessSessionId": sessionID,
+		"livenessToken":     token,
+		"livenessVerified":  true,
+	}
+	body, _ := json.Marshal(regPayload)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/users/register", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created on registration with liveness token, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

@@ -71,17 +71,6 @@ export const Shell: React.FC = () => {
               >
                 KREA NOVA
               </span>
-              <span
-                style={{
-                  fontSize: '9px',
-                  color: 'var(--brand-gold)',
-                  letterSpacing: '0.16em',
-                  fontWeight: 800,
-                  marginTop: '3px',
-                }}
-              >
-                REAL ESTATE INVESTMENTS
-              </span>
             </div>
           </Link>
 

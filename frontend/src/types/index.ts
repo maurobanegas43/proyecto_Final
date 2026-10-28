@@ -1,8 +1,98 @@
 export type ProjectStatus = 'draft' | 'under_review' | 'approved' | 'rejected' | 'published';
 
+export interface ProjectImage {
+  url: string;
+  caption: string;
+  category?: 'render' | 'construction' | 'interior' | 'amenity' | 'aerial';
+}
+
+export interface DeveloperProfile {
+  id: string;
+  companyName: string;
+  tradeName: string;
+  cuit: string;
+  companyType: 'SA' | 'SAS' | 'SRL' | 'Fideicomiso';
+  email: string;
+  phone: string;
+  legalAddress: string;
+  repFullName: string;
+  repRole: string;
+  specialty: string;
+  deliveredM2: number;
+  completedProjects: number;
+  verificationStatus: 'verified' | 'pending';
+  logoBadge?: string;
+}
+
+export interface BudgetItem {
+  id: string;
+  category: 'material' | 'payroll' | 'equipment' | 'permits_fees';
+  concept: string;
+  details: string;
+  quantity?: number;
+  unit?: string;
+  unitPriceUSD?: number;
+  totalUSD: number;
+  datePaid: string;
+  recipientOrSupplier: string;
+  receiptNumber: string;
+}
+
+export interface ProgressMilestone {
+  id: string;
+  date: string;
+  title: string;
+  phase: string;
+  percentage: number;
+  inspector: string;
+  status: 'completed' | 'in_progress' | 'upcoming';
+  reportSummary: string;
+  technicalDetails: string;
+}
+
+export interface ArchitecturalSpecs {
+  studioName: string;
+  leadArchitect: string;
+  structuralEngineer: string;
+  landscapeDesign?: string;
+  designConcept: string;
+  sustainabilityRating: string;
+  totalBuiltAreaM2: number;
+  sellableAreaM2: number;
+  floorsCount: number;
+  subfloorsCount: number;
+  totalUnitsCount: number;
+  amenitiesDescription: string;
+}
+
+export interface ConstructionData {
+  generalContractor: string;
+  technicalAuditor: string;
+  permitNumber: string;
+  workStartDate: string;
+  estimatedDeliveryDate: string;
+  insurancePolicy: string;
+  fiduciaryTrustee: string;
+  notaryPublic: string;
+  currentWorkStatusSummary: string;
+}
+
+export interface ProjectBudgetAudit {
+  totalBudgetUSD: number;
+  executedBudgetUSD: number;
+  rubrosSummary: {
+    rubro: string;
+    budgetedUSD: number;
+    executedUSD: number;
+    percentage: number;
+  }[];
+  budgetItems: BudgetItem[];
+}
+
 export interface Project {
   id: string;
   developerId: string;
+  developerName?: string;
   name: string;
   location: string;
   description: string;
@@ -17,7 +107,12 @@ export interface Project {
   durationMonths?: number;
   tokenSymbol?: string;
   imageUrl?: string;
+  images?: ProjectImage[];
   category?: string;
+  architecturalSpecs?: ArchitecturalSpecs;
+  constructionData?: ConstructionData;
+  budgetAudit?: ProjectBudgetAudit;
+  progressMilestones?: ProgressMilestone[];
 }
 
 export interface Investment {

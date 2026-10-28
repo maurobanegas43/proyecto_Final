@@ -17,6 +17,7 @@ import (
 	"github.com/maurobanegas43/proyecto_final/backend/internal/application/services"
 	"github.com/maurobanegas43/proyecto_final/backend/internal/config"
 	"github.com/maurobanegas43/proyecto_final/backend/internal/security/crypto"
+	"github.com/maurobanegas43/proyecto_final/backend/internal/security/google"
 )
 
 func main() {
@@ -70,6 +71,10 @@ func main() {
 	// 3. Application services
 	projectSvc := services.NewProjectService(projectRepo, idGen, clock)
 	userSvc := services.NewUserService(userRepo, encryptor, hasher, idGen, clock)
+	if cfg.GoogleClientID != "" {
+		log.Println("enabling Google ID Token verification with client id configured")
+	}
+	userSvc.SetGoogleVerifier(google.NewTokenVerifier(cfg.GoogleClientID))
 	fundSvc := services.NewFundService(fundRepo, projectRepo, userRepo, idGen, clock)
 
 	// 4. Inbound HTTP adapter (Gin)
@@ -82,7 +87,9 @@ func main() {
 
 	v1 := r.Group("/api/v1")
 	httpgin.NewProjectHandler(projectSvc).Register(v1)
-	httpgin.NewUserHandler(userSvc).Register(v1)
+	userHandler := httpgin.NewUserHandler(userSvc)
+	userHandler.Register(v1)
+	userHandler.RegisterAuthRoutes(v1)
 	httpgin.NewFundHandler(fundSvc).Register(v1)
 
 	log.Printf("api listening on :%s", cfg.Port)

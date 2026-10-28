@@ -116,3 +116,17 @@ export function validateEmail(email: string): { isValid: boolean; message?: stri
   }
   return { isValid: true };
 }
+
+/**
+ * Validates Gmail domain specifically for investors.
+ */
+export function validateGmailAddress(email: string): { isValid: boolean; message?: string } {
+  const clean = email.trim().toLowerCase();
+  const baseCheck = validateEmail(clean);
+  if (!baseCheck.isValid) return baseCheck;
+
+  if (!clean.endsWith('@gmail.com') && !clean.endsWith('@googlemail.com')) {
+    return { isValid: false, message: 'Para inversores, se requiere una casilla oficial @gmail.com validada.' };
+  }
+  return { isValid: true };
+}
