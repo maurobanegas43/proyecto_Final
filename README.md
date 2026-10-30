@@ -10,9 +10,6 @@
 
 ---
 
-> [!WARNING]
-> **Este proyecto tiene fines exclusivamente académicos.** No recibe ni custodia dinero real, no realiza ofertas públicas, no emite valores negociables y no custodia activos ni claves privadas de clientes. Los pagos, los controles KYC/AML y las operaciones de inversión son **simulados** o se ejecutan en entornos de prueba. No constituye asesoramiento de inversión ni promesa de rentabilidad.
-
 ## Tabla de contenidos
 
 - [Descripción](#descripción)
